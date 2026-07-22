@@ -1,0 +1,14 @@
+Options -MultiViews
+RewriteEngine On
+
+# (Removed sitemap rewrite rule - now generated statically during build)
+
+# Ignore the PHP backend API directory from being rewritten to index.html
+RewriteCond %{REQUEST_URI} !^/yarotech-api/
+
+# Serve existing files and directories directly (assets, images, etc.)
+RewriteCond %{REQUEST_FILENAME} !-f
+RewriteCond %{REQUEST_FILENAME} !-d
+
+# Everything else → spa.html (SPA client-side routing)
+RewriteRule ^ spa.html [QSA,L]

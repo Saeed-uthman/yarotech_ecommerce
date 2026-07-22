@@ -1,0 +1,4 @@
+# Redirect all traffic to /public for cPanel-style hosting where the
+# document root points at the project root instead of /public.
+RewriteEngine On
+RewriteRule ^(.*)$ public/$1 [L]

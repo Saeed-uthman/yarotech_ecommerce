@@ -1,0 +1,12 @@
+User-agent: *
+Allow: /
+Disallow: /admin/
+Disallow: /dashboard/
+Disallow: /checkout/
+Disallow: /invoice/
+Disallow: /verify-email/
+Disallow: /forgot-password/
+Disallow: /reset-password/
+Disallow: /api/
+
+Sitemap: https://shop.y.yarotech.com.ng/sitemap.xml

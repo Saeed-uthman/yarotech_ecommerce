@@ -1,0 +1,27 @@
+RewriteEngine On
+
+# Prevent cPanel from hijacking API errors with HTML pages
+ErrorDocument 400 default
+ErrorDocument 401 default
+ErrorDocument 403 default
+ErrorDocument 404 default
+ErrorDocument 409 default
+ErrorDocument 422 default
+ErrorDocument 500 default
+
+# Ensure Authorization header is passed to PHP in CGI/FastCGI mode.
+SetEnvIf Authorization "(.*)" HTTP_AUTHORIZATION=$1
+RewriteCond %{HTTP:Authorization} .
+RewriteRule .* - [E=HTTP_AUTHORIZATION:%{HTTP:Authorization}]
+
+# Block maintenance/debug scripts from web access. Run these from CLI only.
+<FilesMatch "^(check_|fix_|deep_fix_|list_|run_|test_).+\.php$">
+    Require all denied
+</FilesMatch>
+
+# Allow direct access to existing files (e.g. /uploads/*).
+RewriteCond %{REQUEST_FILENAME} -f
+RewriteRule ^ - [L]
+
+# Route everything else through the front controller.
+RewriteRule ^ index.php [QSA,L]
