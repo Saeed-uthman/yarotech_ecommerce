@@ -220,4 +220,8 @@ main().catch((err) => {
   console.error("❌ Fatal prerender error:");
   console.error(err);
   process.exit(1);
+<<<<<<< HEAD
 });
+=======
+});
+>>>>>>> 04dc782545c15c7166c773359917a8be00612f71
