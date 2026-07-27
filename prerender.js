@@ -7,46 +7,58 @@ import { fileURLToPath } from "url";
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const DIST_DIR = path.resolve(__dirname, "dist/client");
 
+// Production API base URL.
+// The API is exposed publicly at:
+// https://api-shop.yarotech.com.ng/api
+const API_URL = "https://api-shop.yarotech.com.ng/api".replace(/\/+$/, "");
+
 async function getProductSlugs() {
   console.log("📦 Fetching products from API...");
 
+  const url = `${API_URL}/products?per_page=1000`;
+  console.log(`🌐 Product API URL: ${url}`);
+
   try {
-    const res = await fetch(
-      "https://shop.y.yarotech.com.ng/yarotech-api/public/api/products?per_page=1000"
-    );
+    const res = await fetch(url);
 
     if (!res.ok) {
-      throw new Error(`API returned ${res.status}`);
+      console.warn(`⚠️ Product API returned ${res.status}. Continuing without product routes.`);
+      return [];
     }
 
     const data = await res.json();
+    const items = data?.data?.items;
 
-    if (data?.data?.items) {
-      const slugs = data.data.items
-        .map((p) => p.slug)
-        .filter(Boolean);
-
-      console.log(`✅ Found ${slugs.length} products.`);
-      return slugs;
+    if (!Array.isArray(items)) {
+      console.warn("⚠️ Product API response did not contain data.items array. Continuing without product routes.");
+      return [];
     }
-  } catch (err) {
-    console.error("❌ Failed to fetch products:");
-    console.error(err);
-  }
 
-  return [];
+    const slugs = items
+      .map((product) => product?.slug)
+      .filter(Boolean);
+
+    console.log(`✅ Found ${slugs.length} products.`);
+    return slugs;
+  } catch (err) {
+    console.warn("⚠️ Failed to fetch products. Continuing without product routes.");
+    console.warn(err);
+    return [];
+  }
 }
 
 async function generateSitemap() {
-  try {
-    console.log("🗺️ Generating sitemap...");
+  console.log("🗺️ Generating sitemap...");
 
-    const res = await fetch(
-      "https://shop.y.yarotech.com.ng/yarotech-api/public/api/sitemap.xml"
-    );
+  const url = `${API_URL}/sitemap.xml`;
+  console.log(`🌐 Sitemap URL: ${url}`);
+
+  try {
+    const res = await fetch(url);
 
     if (!res.ok) {
-      throw new Error(`Status ${res.status}`);
+      console.warn(`⚠️ Sitemap endpoint returned ${res.status}. Skipping sitemap generation.`);
+      return;
     }
 
     const xml = await res.text();
@@ -59,8 +71,8 @@ async function generateSitemap() {
 
     console.log("✅ sitemap.xml generated.");
   } catch (err) {
-    console.error("❌ Failed to generate sitemap");
-    console.error(err);
+    console.warn("⚠️ Failed to generate sitemap. Continuing build.");
+    console.warn(err);
   }
 }
 
@@ -69,24 +81,36 @@ async function main() {
   const spaPath = path.join(DIST_DIR, "spa.html");
 
   try {
+    await fs.access(indexPath);
+  } catch {
+    console.error(`❌ Could not find ${indexPath}. Run the Vite build first.`);
+    process.exit(1);
+  }
+
+  try {
     await fs.copyFile(indexPath, spaPath);
     console.log("✅ Copied index.html → spa.html");
   } catch (err) {
-    console.error("Unable to create spa.html");
+    console.error("❌ Unable to create spa.html");
     console.error(err);
-    return;
+    process.exit(1);
   }
 
   const app = express();
-
   app.use(express.static(DIST_DIR));
-
   app.use((req, res) => {
     res.sendFile(spaPath);
   });
 
   const server = app.listen(0, async () => {
-    const port = server.address().port;
+    const address = server.address();
+    const port = typeof address === "object" && address !== null ? address.port : null;
+
+    if (!port) {
+      console.error("❌ Could not determine local server port.");
+      server.close();
+      process.exit(1);
+    }
 
     console.log(`🚀 Local server started on port ${port}`);
 
@@ -102,11 +126,7 @@ async function main() {
     ];
 
     const slugs = await getProductSlugs();
-
-    const productRoutes = slugs.map(
-      (slug) => `/shop/${slug}`
-    );
-
+    const productRoutes = slugs.map((slug) => `/shop/${slug}`);
     const allRoutes = [...staticRoutes, ...productRoutes];
 
     console.log(`📄 Total routes: ${allRoutes.length}`);
@@ -126,83 +146,56 @@ async function main() {
           "--disable-setuid-sandbox",
           "--disable-dev-shm-usage",
           "--disable-gpu",
+          "--disable-software-rasterizer",
+          "--no-zygote",
         ],
       });
 
       console.log("✅ Browser launched.");
 
       const page = await browser.newPage();
-
       console.log("✅ New page created.");
 
       page.setDefaultNavigationTimeout(120000);
       page.setDefaultTimeout(120000);
 
       for (const route of allRoutes) {
-        const start = Date.now();
-
-        console.log("");
-        console.log("=================================");
+        const url = `http://localhost:${port}${route}`;
+        console.log(`\n=================================`);
         console.log(`Rendering: ${route}`);
-        console.log("=================================");
+        console.log(`=================================`);
 
         try {
-          await page.goto(
-            `http://localhost:${port}${route}`,
-            {
-              waitUntil: "domcontentloaded",
-              timeout: 120000,
-            }
-          );
+          await page.goto(url, {
+            waitUntil: "networkidle2",
+            timeout: 120000,
+          });
 
-          // Give React time to hydrate and fetch data
-          await new Promise((resolve) =>
-            setTimeout(resolve, 3000)
-          );
+          await new Promise((resolve) => setTimeout(resolve, 1000));
 
           const html = await page.content();
 
-          let savePath;
-
+          let outputPath;
           if (route === "/") {
-            savePath = path.join(
-              DIST_DIR,
-              "index.html"
-            );
+            outputPath = path.join(DIST_DIR, "index.html");
           } else {
-            savePath = path.join(
-              DIST_DIR,
-              route.substring(1),
-              "index.html"
-            );
+            const cleanRoute = route.replace(/^\/|\/$/g, "");
+            const routeDir = path.join(DIST_DIR, cleanRoute);
 
-            await fs.mkdir(
-              path.dirname(savePath),
-              {
-                recursive: true,
-              }
-            );
+            await fs.mkdir(routeDir, { recursive: true });
+            outputPath = path.join(routeDir, "index.html");
           }
 
-          await fs.writeFile(
-            savePath,
-            html,
-            "utf8"
-          );
-
-          console.log(
-            `✅ Done (${Date.now() - start} ms)`
-          );
+          await fs.writeFile(outputPath, html, "utf8");
+          console.log(`✅ Done (${route})`);
         } catch (err) {
-          console.error(`❌ Failed route: ${route}`);
+          console.error(`❌ Failed to prerender ${route}`);
           console.error(err);
         }
       }
 
-      console.log("");
-      console.log("🎉 All routes processed.");
+      console.log("\n🎉 All routes processed.");
     } catch (err) {
-      console.error("");
       console.error("❌ Browser error");
       console.error(err);
     } finally {
@@ -210,7 +203,10 @@ async function main() {
         try {
           await browser.close();
           console.log("✅ Browser closed.");
-        } catch {}
+        } catch (err) {
+          console.warn("⚠️ Browser close failed.");
+          console.warn(err);
+        }
       }
 
       server.close(() => {
@@ -221,6 +217,7 @@ async function main() {
 }
 
 main().catch((err) => {
-  console.error("Fatal error:");
+  console.error("❌ Fatal prerender error:");
   console.error(err);
+  process.exit(1);
 });
