@@ -523,8 +523,10 @@ function ProductEditor({
         gallery: [...(prev.gallery || []), res.url],
       }));
       toast.success("Image uploaded");
-    } catch {
-      toast.error("Upload failed");
+    } catch (err: any) {
+      const msg = err?.message || err?.data?.message || "Upload failed";
+      toast.error(msg);
+      console.error("Image upload error:", err);
     }
   };
 

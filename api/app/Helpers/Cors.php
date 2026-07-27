@@ -13,7 +13,10 @@ final class Cors
     public static function handle(): void
     {
         $origin = $_SERVER['HTTP_ORIGIN'] ?? '';
-        $allowed = array_filter(array_map('trim', explode(',', (string) env('FRONTEND_URL', 'http://localhost:5173'))));
+        $rawUrls = env('FRONTEND_URLS', '') !== ''
+            ? env('FRONTEND_URLS', '')
+            : (string) env('FRONTEND_URL', 'http://localhost:5173');
+        $allowed = array_filter(array_map('trim', explode(',', $rawUrls)));
 
         if ($origin && (in_array($origin, $allowed, true) || env('APP_ENV') === 'local')) {
             header("Access-Control-Allow-Origin: $origin");
