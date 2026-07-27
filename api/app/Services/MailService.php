@@ -271,7 +271,8 @@ final class MailService
             $mailer = new PHPMailer(true);
             $mailer->isSMTP();
             $mailer->Timeout = 10; // 10 seconds connection timeout
-            $mailer->SMTPDebug = 3;  // Capture full connection trace
+            $isDev = env('APP_ENV', 'local') !== 'production';
+            $mailer->SMTPDebug = $isDev ? 3 : 0;
             $mailer->Debugoutput = function ($str) use (&$smtpDebugLog) {
                 $smtpDebugLog .= $str . "\n";
             };
