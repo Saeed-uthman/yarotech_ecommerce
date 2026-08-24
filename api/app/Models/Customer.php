@@ -67,6 +67,29 @@ final class Customer extends BaseModel
         $stmt->execute();
     }
 
+    /**
+     * Find a customer by exact (case-insensitive) name.
+     * Used to reuse an existing customer when a POS sale has no phone number,
+     * preventing duplicate records for repeat walk-in buyers.
+     */
+    public function findByName(string $name): ?array
+    {
+        $name = trim($name);
+        if ($name === '') {
+            return null;
+        }
+
+        $stmt = $this->db->prepare(
+            "SELECT * FROM {$this->table}
+             WHERE LOWER(TRIM(full_name)) = LOWER(:n)
+             ORDER BY total_orders DESC, last_order_at DESC
+             LIMIT 1"
+        );
+        $stmt->execute([':n' => $name]);
+        $row = $stmt->fetch();
+        return $row ?: null;
+    }
+
     /** Search customers by name, phone, or email (for POS lookup). */
     public function searchByNameOrPhone(string $query): array
     {

@@ -158,4 +158,19 @@ final class CustomerService
     {
         return $this->customers->searchByNameOrPhone($query);
     }
+
+    public function findById(int $id): ?array
+    {
+        return $this->customers->find($id);
+    }
+
+    /**
+     * Find an existing customer by exact (case-insensitive) name.
+     * Used by POS sales when no phone number was captured so repeat
+     * buyers are reused instead of duplicated.
+     */
+    public function findByName(string $name): ?array
+    {
+        return $this->customers->findByName($name);
+    }
 }

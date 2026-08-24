@@ -419,17 +419,41 @@ final class OrderService
             Response::error('Failed to create POS sale: ' . $e->getMessage(), 500);
         }
 
-        // Always create/update a customer record for every sale
+        // Link or create a customer record for every sale (without duplicating)
         $hasRealName = $customerName !== '' && strtolower($customerName) !== 'walk-in customer';
         $hasPhone = $customerPhone !== '';
-        if ($hasRealName || $hasPhone) {
+        if ($customerId !== null || $hasRealName || $hasPhone) {
             try {
-                $phoneForCustomer = $hasPhone ? $customerPhone : ('POS-' . $orderId . '-' . time());
-                $cust = $this->customerService->findOrCreate([
-                    'name'  => $customerName !== '' ? $customerName : 'Walk-in customer',
-                    'phone' => $phoneForCustomer,
-                    'email' => $customerEmail,
-                ]);
+                if ($customerId !== null) {
+                    // An existing customer was explicitly selected at the POS:
+                    // attach the sale to their record and increment stats only.
+                    $cust = $this->customerService->findById($customerId) ?? ['id' => null];
+                } elseif ($hasPhone) {
+                    // Phone is the strongest identifier — match or create on it.
+                    $cust = $this->customerService->findOrCreate([
+                        'name'  => $customerName !== '' ? $customerName : 'Walk-in customer',
+                        'phone' => $customerPhone,
+                        'email' => $customerEmail,
+                    ]);
+                } elseif ($hasRealName) {
+                    // No phone supplied: reuse an existing customer with the same
+                    // name before creating a new record (prevents duplicates).
+                    $cust = $this->customerService->findByName($customerName);
+                    if ($cust && $customerEmail !== '' && trim((string) ($cust['email'] ?? '')) !== $customerEmail) {
+                        $cust = $this->customerService->updateCustomer((int) $cust['id'], [
+                            'email' => $customerEmail,
+                        ]) ?? $cust;
+                    } elseif (!$cust) {
+                        $cust = $this->customerService->createCustomer([
+                            'name'  => $customerName,
+                            'phone' => 'POS-' . $orderId . '-' . time(),
+                            'email' => $customerEmail,
+                        ]) ?? ['id' => null];
+                    }
+                } else {
+                    $cust = ['id' => null];
+                }
+
                 if (!empty($cust['id'])) {
                     $this->customerService->recordOrder((int) $cust['id'], $total);
                     $this->orders->update($orderId, ['customer_id' => (int) $cust['id']]);
