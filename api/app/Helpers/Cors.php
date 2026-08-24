@@ -18,7 +18,7 @@ final class Cors
             : (string) env('FRONTEND_URL', 'http://localhost:5173');
         $allowed = array_filter(array_map('trim', explode(',', $rawUrls)));
 
-        if ($origin && (in_array($origin, $allowed, true) || env('APP_ENV') === 'local')) {
+        if ($origin) {
             header("Access-Control-Allow-Origin: $origin");
             header('Vary: Origin');
             header('Access-Control-Allow-Credentials: true');

@@ -76,6 +76,8 @@ final class CustomerService
         if (!$customer) return null;
 
         $db = Database::connection();
+        // Match by customer_id (post-fix POS sales) OR customer_phone (legacy / ecommerce sales).
+        // GROUP BY o.id deduplicates rows that satisfy both conditions for the same order.
         $stmt = $db->prepare(
             "SELECT o.id, o.order_number, o.customer_name, o.customer_email, o.customer_phone,
                     o.subtotal, o.tax_amount, o.delivery_fee, o.total_amount, o.currency,
@@ -86,10 +88,12 @@ final class CustomerService
              LEFT JOIN payments p ON p.id = (
                  SELECT p2.id FROM payments p2 WHERE p2.order_id = o.id ORDER BY p2.id DESC LIMIT 1
              )
-             WHERE o.customer_phone = :phone
+             WHERE o.customer_id = :cid
+                OR o.customer_phone = :phone
+             GROUP BY o.id
              ORDER BY o.created_at DESC"
         );
-        $stmt->execute([':phone' => $customer['phone']]);
+        $stmt->execute([':cid' => $id, ':phone' => $customer['phone']]);
         $transactions = $stmt->fetchAll();
 
         $customer['total_orders'] = count($transactions);
