@@ -155,6 +155,8 @@ $router->get('/api/invoices/data',  [InvoiceController::class, 'data'], [AuthMid
 $router->get('/api/invoices/pdf',   [InvoiceController::class, 'pdf'],  [AuthMiddleware::class]);
 
 // ---------- pos endpoints ----------
+$router->post('/api/pos/login',          [PosController::class, 'login']);
+$router->post('/api/pos/forgot-password',[PosController::class, 'forgotPassword']);
 $router->get('/api/pos/dashboard',        [PosController::class, 'dashboard'], [AuthMiddleware::class]);
 $router->get('/api/pos/products',         [PosController::class, 'products'], [AuthMiddleware::class]);
 $router->get('/api/pos/orders',           [PosController::class, 'orders'], [AuthMiddleware::class]);

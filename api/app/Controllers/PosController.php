@@ -7,7 +7,9 @@ namespace App\Controllers;
 use App\Helpers\Request;
 use App\Helpers\Response;
 use App\Services\OrderService;
+use App\Services\AuthService;
 use App\Models\Product;
+use App\Models\User;
 
 final class PosController extends BaseController
 {
@@ -180,6 +182,93 @@ final class PosController extends BaseController
                 'total_pages' => 1
             ]
         ], 'POS orders fetched successfully');
+    }
+
+    /**
+     * POST /api/pos/login
+     *
+     * POS-specific login. Accepts staff and admin accounts only.
+     * Deliberately skips the email_verified_at check that exists on the
+     * ecommerce AuthController — POS staff are pre-verified at registration
+     * and should never be blocked by the ecommerce OTP flow.
+     */
+    public function login(): never
+    {
+        $email    = $this->input('email');
+        $password = $this->input('password');
+
+        if (!$email || !$password) {
+            $this->fail('Email and password are required', 400);
+        }
+
+        $users = new User();
+        $user  = $users->findByEmail($email);
+
+        if (!$user || !password_verify((string) $password, $user['password_hash'])) {
+            $this->fail('Invalid email or password', 401);
+        }
+
+        // Only staff and admin may access the POS
+        if (!in_array((string) ($user['role'] ?? ''), ['admin', 'staff'], true)) {
+            $this->fail('Access denied. Only staff and administrators can sign in to the POS.', 403);
+        }
+
+        $auth  = new AuthService();
+        $token = $auth->generateToken($user);
+        unset($user['password_hash']);
+
+        $this->ok([
+            'user'  => $user,
+            'token' => $token,
+        ], 'Login successful');
+    }
+
+    /**
+     * POST /api/pos/forgot-password
+     *
+     * POS-specific password reset. Uses a shared access code for
+     * authorisation instead of an OTP email — the POS has no email
+     * verification screen, so the access-code approach is the correct
+     * flow for this system.
+     */
+    public function forgotPassword(): never
+    {
+        $email      = $this->input('email');
+        $password   = $this->input('password');
+        $accessCode = $this->input('access_code');
+
+        if (!$email || !$password || !$accessCode) {
+            $this->fail('Email, new password, and access code are required', 400);
+        }
+
+        if (strlen((string) $password) < 6) {
+            $this->fail('New password must be at least 6 characters', 400);
+        }
+
+        // Validate access code against the configured POS access code
+        $expectedCode = config('app.pos_access_code', 'YAROPOS2024');
+        if (!hash_equals((string) $expectedCode, (string) $accessCode)) {
+            $this->fail('Invalid security access code', 403);
+        }
+
+        $users = new User();
+        $user  = $users->findByEmail($email);
+
+        if (!$user) {
+            // Silent success to prevent email enumeration
+            $this->ok([], 'If a matching account exists, the password has been updated');
+        }
+
+        // Only allow staff/admin password resets via the POS tool
+        if (!in_array((string) ($user['role'] ?? ''), ['admin', 'staff'], true)) {
+            $this->fail('Access denied. Only staff and administrator passwords can be reset here.', 403);
+        }
+
+        $users->update((int) $user['id'], [
+            'password_hash' => password_hash((string) $password, PASSWORD_BCRYPT),
+        ]);
+
+        $this->ok([], 'Password successfully reset. You can now sign in with your new password.');
     }
 
     /** POST /api/pos/register */
